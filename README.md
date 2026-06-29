@@ -55,13 +55,11 @@ Przykładowy kod źródłowy zawarty w tym repozytorium pozwala w szczególnośc
 
 ## 1. Przygotowanie projektu Google Cloud
 
-1. Uzyskaj kredyt Cloud **OnRamp**, lub skonfiguruj płatności w projekcie Google Cloud
+1. Przejdź do **Google Cloud Console**: [console.cloud.google.com](https://console.cloud.google.com)
 
-2. Przejdź do **Google Cloud Console**: [console.cloud.google.com](https://console.cloud.google.com)
+2. Zaloguj się przy użyciu otrzymanych danych logowania
 
-3. Stwórz nowy projekt Google Cloud i wybierz go aby był aktywny
->[!TIP]
->Możesz sprawdzić dostępność kredytów OnRamp wybierając z menu po lewej stronie: Billing / Credits
+3. Wybierz przygotowany projekt Bielik Krakow June 30-xxxx
 
 4. Otwórz Cloud Shell ([dokumentacja](https://cloud.google.com/shell/docs))
 
@@ -89,7 +87,7 @@ Przykładowy kod źródłowy zawarty w tym repozytorium pozwala w szczególnośc
 
 8. Przejdź do katalogu z kodem źródłowym
    ```bash
-   cd eskadra-bielik-misja2
+   cd bielik-workshop
    ```
 
 9. Uruchom edytor w katalogu z kodem źródłowym
@@ -133,15 +131,10 @@ Przykładowy kod źródłowy zawarty w tym repozytorium pozwala w szczególnośc
    cd llm
    ./cloud_run.sh
    ```
-3. Sprawdź status usługi `bielik` w Cloud Console - Cloud Run - Services
-
+   
 4. Przeanalizuj plik `llm/llm_test1.sh` i zadaj pierwsze pytanie modelowi Bielik uruchamiając ten skrypt
    ```bash
    ./llm_test1.sh
-   ```
-5. Wróć do głównego katalogu projektu
-   ```bash
-   cd ..
    ```
 
 ## 4. Uruchomienie modelu embeddingowego EmbeddingGemma na Cloud Run
@@ -282,6 +275,3 @@ Aby otworzyć interfejs graficzny testowej aplikacji z poziomu Twojego projektu:
    ```
 2. Po otwarciu opublikowanej strony w Twojej przeglądarce internetowej, wpisz w okno dialogowe dowolne zapytanie (np. "Do której godziny jest otwarty basen?") i kliknij "Zapytaj".
 3. Porównaj strumień odpowiedzi wyświetlany dla samej bazy wiedzy modelu (bez dodatkowego kontekstu) z bogatszą odpowiedzią RAG wygenerowaną w oparciu o wiedzę z przeszukiwania BigQuery Vector Search.
-
-
-
