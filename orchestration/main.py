@@ -1,6 +1,7 @@
 import os
 import csv
 import io
+import re
 import requests
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -60,6 +61,62 @@ def get_embedding(text: str) -> list[float]:
     response.raise_for_status()
     # Zakładamy odpowiedź z modelem `embed` z Ollama
     return response.json().get("embeddings", [[]])[0]
+
+# Tokeny sterujące używane w szablonie czatu Bielika spakowanego w Ollamie
+# (szablon w stylu Llama-3 - sam Bielik nie jest pochodną Llama-3; jego oficjalny
+# format to ChatML). Modelfile zatrzymuje generację tylko na części z nich, przez co
+# pozostałe (np. <|eom_id|>, <|chat_token|>) potrafią wyciec do treści odpowiedzi.
+# Przekazujemy je jako dodatkowe stop-tokeny, a ewentualne resztki usuwamy niżej.
+LLM_STOP_TOKENS = [
+    "<|eot_id|>",
+    "<|eom_id|>",
+    "<|start_header_id|>",
+    "<|end_header_id|>",
+    "<|chat_token|>",
+]
+
+# Dowolny token w formacie <|...|> - do wyczyszczenia z gotowej odpowiedzi.
+_SPECIAL_TOKEN_RE = re.compile(r"<\|[^|]*\|>")
+
+def clean_answer(text: str) -> str:
+    """Usuwa resztkowe specjalne tokeny (<|...|>) i nadmiarowe białe znaki."""
+    return _SPECIAL_TOKEN_RE.sub("", text).strip()
+
+def call_llm(user_content: str, system: str | None = None) -> str:
+    """Wysłanie zapytania do modelu Bielik na Cloud Run.
+
+    Instrukcję przekazujemy jako wiadomość systemową, a właściwe pytanie jako
+    wiadomość użytkownika. Rozdzielenie ról (zamiast upychania wszystkiego w
+    turze `user`) sprawia, że mały model nie powtarza szablonu promptu.
+    """
+    if not LLM_URL:
+        raise HTTPException(status_code=500, detail="LLM_URL variable is not set")
+
+    token = get_id_token(LLM_URL)
+    url = f"{LLM_URL}/api/chat"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": user_content})
+
+    payload = {
+        "model": "SpeakLeash/bielik-4.5b-v3.0-instruct:Q8_0",
+        "messages": messages,
+        "stream": False,
+        "options": {"stop": LLM_STOP_TOKENS}
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+    answer = clean_answer(response.json().get("message", {}).get("content", ""))
+    if not answer:
+        answer = "Nie udało się wygenerować odpowiedzi. Spróbuj przeformułować pytanie."
+    return answer
 
 class AskRequest(BaseModel):
     query: str
@@ -133,36 +190,18 @@ async def ask_question(request_data: AskRequest):
         
     # Krok 2: Przygotowanie Kontekstu i Wiadomości do LLM
     context_text = "\\n\\n".join(context_docs)
-    
-    prompt = (
+
+    system_prompt = (
         f"Jesteś pomocnym asystentem odpowiadającym na pytania dotyczące zasad hotelowych. "
-        f"Odpowiedz na poniższe pytanie bazując TYLKO na dostarczonym kontekście.\\n\\n"
-        f"KONTEKST:\\n{context_text}\\n\\n"
-        f"PYTANIE:\\n{query}"
+        f"Odpowiedz na pytanie użytkownika bazując TYLKO na dostarczonym kontekście.\\n\\n"
+        f"KONTEKST:\\n{context_text}"
     )
-    
-    if not LLM_URL:
-        raise HTTPException(status_code=500, detail="LLM_URL variable is not set")
-        
-    token = get_id_token(LLM_URL)
-    url = f"{LLM_URL}/api/chat"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "SpeakLeash/bielik-4.5b-v3.0-instruct:Q8_0",
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": False
-    }
-    
+
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        answer = response.json().get("message", {}).get("content", "")
+        answer = call_llm(query, system=system_prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Błąd podczas komunikacji z modelem LLM: {e}")
-        
+
     return {
         "answer": answer,
         "context_used": context_docs
@@ -171,32 +210,13 @@ async def ask_question(request_data: AskRequest):
 @app.post("/ask_direct")
 async def ask_direct(request_data: AskRequest):
     query = request_data.query
+    system_prompt = "Jesteś pomocnym asystentem. Odpowiedz na pytanie użytkownika w sposób jasny i zwięzły."
 
-    if not LLM_URL:
-        raise HTTPException(status_code=500, detail="LLM_URL variable is not set")
-        
-    token = get_id_token(LLM_URL)
-    url = f"{LLM_URL}/api/chat"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    
-    prompt = f"Odpowiedz na poniższe pytanie w sposób jasny i zwięzły:\\n\\nPYTANIE:\\n{query}"
-    
-    payload = {
-        "model": "SpeakLeash/bielik-4.5b-v3.0-instruct:Q8_0",
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": False
-    }
-    
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        answer = response.json().get("message", {}).get("content", "")
+        answer = call_llm(query, system=system_prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Błąd podczas komunikacji z modelem LLM: {e}")
-        
+
     return {
         "answer": answer
     }
