@@ -15,6 +15,7 @@ Te same endpointy i ten sam interfejs WWW co w wersji chmurowej:
 import os
 import csv
 import io
+import re
 import requests
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -74,17 +75,52 @@ def get_embedding(text: str) -> list[float]:
     return response.json().get("embeddings", [[]])[0]
 
 
-def call_llm(prompt: str) -> str:
-    """Wysłanie promptu do modelu Bielik w lokalnej Ollamie."""
+# Specjalne tokeny sterujące z rodziny Llama-3 (na której bazuje Bielik).
+# Modelfile Bielika zatrzymuje generację tylko na części z nich, przez co
+# pozostałe (np. <|eom_id|>, <|chat_token|>) potrafią wyciec do treści odpowiedzi.
+# Przekazujemy je jako dodatkowe stop-tokeny, a ewentualne resztki usuwamy niżej.
+LLM_STOP_TOKENS = [
+    "<|eot_id|>",
+    "<|eom_id|>",
+    "<|start_header_id|>",
+    "<|end_header_id|>",
+    "<|chat_token|>",
+]
+
+# Dowolny token w formacie <|...|> - do wyczyszczenia z gotowej odpowiedzi.
+_SPECIAL_TOKEN_RE = re.compile(r"<\|[^|]*\|>")
+
+
+def clean_answer(text: str) -> str:
+    """Usuwa resztkowe specjalne tokeny (<|...|>) i nadmiarowe białe znaki."""
+    return _SPECIAL_TOKEN_RE.sub("", text).strip()
+
+
+def call_llm(user_content: str, system: str | None = None) -> str:
+    """Wysłanie zapytania do modelu Bielik w lokalnej Ollamie.
+
+    Instrukcję przekazujemy jako wiadomość systemową, a właściwe pytanie jako
+    wiadomość użytkownika. Rozdzielenie ról (zamiast upychania wszystkiego w
+    turze `user`) sprawia, że mały model nie powtarza szablonu promptu.
+    """
     url = f"{OLLAMA_URL}/api/chat"
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": user_content})
+
     payload = {
         "model": LLM_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": messages,
         "stream": False,
+        "options": {"stop": LLM_STOP_TOKENS},
     }
     response = requests.post(url, json=payload, timeout=300)
     response.raise_for_status()
-    return response.json().get("message", {}).get("content", "")
+    answer = clean_answer(response.json().get("message", {}).get("content", ""))
+    if not answer:
+        answer = "Nie udało się wygenerować odpowiedzi. Spróbuj przeformułować pytanie."
+    return answer
 
 
 class AskRequest(BaseModel):
@@ -145,15 +181,14 @@ async def ask_question(request_data: AskRequest):
 
     # Krok 2: Zbudowanie promptu z kontekstem i zapytanie do LLM
     context_text = "\n\n".join(context_docs)
-    prompt = (
+    system_prompt = (
         "Jesteś pomocnym asystentem odpowiadającym na pytania dotyczące zasad hotelowych. "
-        "Odpowiedz na poniższe pytanie bazując TYLKO na dostarczonym kontekście.\n\n"
-        f"KONTEKST:\n{context_text}\n\n"
-        f"PYTANIE:\n{query}"
+        "Odpowiedz na pytanie użytkownika bazując TYLKO na dostarczonym kontekście.\n\n"
+        f"KONTEKST:\n{context_text}"
     )
 
     try:
-        answer = call_llm(prompt)
+        answer = call_llm(query, system=system_prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Błąd podczas komunikacji z modelem LLM: {e}")
 
@@ -163,10 +198,10 @@ async def ask_question(request_data: AskRequest):
 @app.post("/ask_direct")
 async def ask_direct(request_data: AskRequest):
     query = request_data.query
-    prompt = f"Odpowiedz na poniższe pytanie w sposób jasny i zwięzły:\n\nPYTANIE:\n{query}"
+    system_prompt = "Jesteś pomocnym asystentem. Odpowiedz na pytanie użytkownika w sposób jasny i zwięzły."
 
     try:
-        answer = call_llm(prompt)
+        answer = call_llm(query, system=system_prompt)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Błąd podczas komunikacji z modelem LLM: {e}")
 
