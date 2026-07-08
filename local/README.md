@@ -36,19 +36,37 @@ cd local
 docker compose up --build -d
 ```
 
-Zasil bazę wiedzy i przetestuj:
+**Zasil bazę wiedzy (krok wymagany).** Baza wektorowa startuje pusta — bez tego
+kroku endpoint `/ask` nie znajdzie żadnego kontekstu (RAG zwróci puste źródła,
+a model będzie zmyślał). Wgraj dane raz po uruchomieniu stacku:
 
 ```bash
 # z katalogu głównego repo:
 curl -X POST "http://localhost:8080/ingest" -F "file=@vector_store/hotel_rules.csv"
+```
 
+Sprawdź, że dane się zapisały (powinno pokazać 19 punktów):
+
+```bash
+curl -s http://localhost:6333/collections/hotel_rules | grep -o '"points_count":[0-9]*'
+```
+
+Zadaj przykładowe pytanie:
+
+```bash
 curl -X POST "http://localhost:8080/ask" -H "Content-Type: application/json" \
      -d '{"query": "Ile kosztuje parking hotelowy?"}'
 ```
 
 Otwórz UI: **http://localhost:8080**
 
-Zatrzymanie: `docker compose down` (dodaj `-v`, aby skasować dane w Qdrant).
+> [!IMPORTANT]
+> Dane w Qdrant leżą na nazwanym wolumenie `local_qdrant_storage` i **przetrwają**
+> zwykły restart (`docker compose restart`, a także `down`/`up` bez `-v`).
+> Znikają dopiero po `docker compose down -v` lub usunięciu wolumenu — po takim
+> „czystym" starcie trzeba ponownie uruchomić `/ingest`.
+
+Zatrzymanie: `docker compose down` (dodaj `-v`, aby skasować też dane w Qdrant).
 
 ## Wariant B — aplikacja natywnie, tylko Qdrant w Dockerze
 
@@ -63,6 +81,9 @@ cd local
 python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
 ./.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8080
 ```
+
+Następnie **zasil bazę** tak samo jak w Wariancie A (endpoint `/ingest`) — to
+krok wymagany, inaczej `/ask` nie znajdzie kontekstu.
 
 ## Konfiguracja (zmienne środowiskowe)
 
