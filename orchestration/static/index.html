@@ -197,7 +197,7 @@
 
     <div class="header">
         <h1>Bielik + RAG</h1>
-        <p>Zadaj pytanie i porównaj odpowiedź samego modelu Bielik z odpowiedzią wspartą kontekstem RAG opartym o hotelową bazę wiedzy w BigQuery.</p>
+        <p>Zadaj pytanie i porównaj odpowiedź samego modelu Bielik z odpowiedzią wspartą kontekstem RAG opartym o hotelową bazę wiedzy w wektorowej bazie danych.</p>
     </div>
 
     <div class="input-section">
@@ -208,13 +208,13 @@
     <div class="comparision-container">
         <div class="panel">
             <h2>Bielik</h2>
-            <p class="desc">Odpowiedź wygenerowana wyłącznie w oparciu o wagę modelu, bez dostępu do bazy wektorowej BigQuery.</p>
+            <p class="desc">Odpowiedź wygenerowana wyłącznie w oparciu o wagę modelu, bez dostępu do bazy wektorowej.</p>
             <div id="directContent" class="content"><i>Czekam na Twoje pytanie...</i></div>
         </div>
 
         <div class="panel">
             <h2>Bielik (RAG)</h2>
-            <p class="desc">Odpowiedź wygenerowana w oparciu o odszukane w locie dokumenty z BigQuery Vector Search.</p>
+            <p class="desc">Odpowiedź wygenerowana w oparciu o odszukane w locie dokumenty z bazy wektorowej.</p>
             <div id="ragContent" class="content"><i>Czekam na Twoje pytanie...</i></div>
             <div id="ragContext" class="context-box" style="display: none;"></div>
         </div>
@@ -278,7 +278,7 @@
                     ragContent.innerText = res.answer;
                     if(res.context_used && res.context_used.length > 0) {
                         ragContext.style.display = 'block';
-                        ragContext.innerHTML = `<h4>💡 Wykorzystany kontekst z BigQuery:</h4>`;
+                        ragContext.innerHTML = `<h4>💡 Wykorzystany kontekst z bazy wektorowej:</h4>`;
                         res.context_used.forEach(ctx => {
                             ragContext.innerHTML += `<div class="context-item">${ctx}</div>`;
                         });
