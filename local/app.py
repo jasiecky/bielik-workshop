@@ -75,8 +75,9 @@ def get_embedding(text: str) -> list[float]:
     return response.json().get("embeddings", [[]])[0]
 
 
-# Specjalne tokeny sterujące z rodziny Llama-3 (na której bazuje Bielik).
-# Modelfile Bielika zatrzymuje generację tylko na części z nich, przez co
+# Tokeny sterujące używane w szablonie czatu Bielika spakowanego w Ollamie
+# (szablon w stylu Llama-3 - sam Bielik nie jest pochodną Llama-3; jego oficjalny
+# format to ChatML). Modelfile zatrzymuje generację tylko na części z nich, przez co
 # pozostałe (np. <|eom_id|>, <|chat_token|>) potrafią wyciec do treści odpowiedzi.
 # Przekazujemy je jako dodatkowe stop-tokeny, a ewentualne resztki usuwamy niżej.
 LLM_STOP_TOKENS = [
